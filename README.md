@@ -4,15 +4,9 @@ A real-time AI-powered fitness trainer and rep counter using **MediaPipe Pose** 
 
 ---
 
-## 🌐 Live Demo
-
-> Coming soon (or host via GitHub Pages and insert your link here)
-
----
-
 ## 📸 Preview
 
-![AI Fitness Trainer Preview](https://your-demo-image-or-gif-url.com)
+![AI Fitness Trainer Preview](file:///C:/Users/user/Desktop/mediapipe/project/AI%20Personal%20Trainer/AIfitness.html)
 
 ---
 
