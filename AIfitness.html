@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fitness Trainer & Rep Counter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin: auto;
+        }
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+        }
+        #output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl mx-auto">
+        <h1 class="text-4xl font-bold text-center mb-2 text-cyan-400">AI Fitness Trainer</h1>
+        <p class="text-center text-gray-400 mb-8">Follow the instructions to perform the exercise correctly.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Video Feed and Canvas -->
+            <div class="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg">
+                <div class="video-container shadow-2xl rounded-lg">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="output_canvas" width="640" height="480"></canvas>
+                </div>
+            </div>
+
+            <!-- Controls and Stats -->
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold mb-4 border-b border-gray-700 pb-2">Exercise: Bicep Curl</h2>
+                    <div class="space-y-4">
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <p class="text-lg font-semibold text-cyan-400">Rep Count</p>
+                            <p id="rep-count" class="text-5xl font-bold">0</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <p class="text-lg font-semibold text-cyan-400">Status</p>
+                            <p id="status" class="text-2xl font-medium">-</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <p class="text-lg font-semibold text-cyan-400">Feedback</p>
+                            <p id="feedback" class="text-lg">-</p>
+                        </div>
+                    </div>
+                </div>
+                <button id="start-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 mt-6">
+                    Start Webcam
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const repCountElement = document.getElementById('rep-count');
+        const statusElement = document.getElementById('status');
+        const feedbackElement = document.getElementById('feedback');
+
+        let repCounter = 0;
+        let stage = null; // 'down' or 'up'
+
+        function calculateAngle(a, b, c) {
+            const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+            let angle = Math.abs(radians * 180.0 / Math.PI);
+            if (angle > 180.0) {
+                angle = 360 - angle;
+            }
+            return angle;
+        }
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2 });
+
+                try {
+                    const landmarks = results.poseLandmarks;
+
+                    // Get coordinates for left arm
+                    const leftShoulder = landmarks[11];
+                    const leftElbow = landmarks[13];
+                    const leftWrist = landmarks[15];
+
+                    // Calculate angle
+                    const angle = calculateAngle(leftShoulder, leftElbow, leftWrist);
+
+                    // Bicep Curl Rep Counting Logic
+                    if (angle > 160) {
+                        stage = "down";
+                        feedbackElement.textContent = "Curl up!";
+                    }
+                    if (angle < 40 && stage === 'down') {
+                        stage = "up";
+                        repCounter += 1;
+                        repCountElement.textContent = repCounter;
+                        feedbackElement.textContent = "Extend down!";
+                    }
+                    statusElement.textContent = stage ? stage.toUpperCase() : '-';
+
+                } catch (error) {
+                    console.error("Could not find landmarks:", error);
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            },
+        });
+
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            smoothSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        pose.onResults(onResults);
+
+        let camera = null;
+        startBtn.addEventListener('click', () => {
+            if (camera) {
+                // If camera is already running, stop it
+                camera.stop();
+                camera = null;
+                startBtn.textContent = 'Start Webcam';
+                videoElement.style.display = 'none';
+
+            } else {
+                // Start the camera
+                videoElement.style.display = 'block';
+                startBtn.textContent = 'Stop Webcam';
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await pose.send({ image: videoElement });
+                    },
+                    width: 640,
+                    height: 480
+                });
+                camera.start();
+            }
+        });
+
+    </script>
+</body>
+</html>
